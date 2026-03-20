@@ -1,0 +1,231 @@
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
+import {
+  useReactTable,
+  getCoreRowModel,
+  flexRender,
+  type ColumnDef,
+  type Row,
+} from "@tanstack/react-table";
+import { usePocketBase } from "../context/usePocketBase";
+import type { TrackedRecord, RowState } from "../context/PocketBaseContext";
+import {
+  Table,
+  Loader2,
+  AlertCircle,
+  Plus,
+  Trash2,
+  Save,
+  CheckCircle,
+  XCircle,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
+  GripVertical,
+} from "lucide-react";
+import type { CollectionModel } from "pocketbase";
+
+interface SchemaFieldOptions {
+  // Relation field options
+  collectionId?: string;
+  cascadeDelete?: boolean;
+  displayFields?: string[];
+  maxSelect?: number;
+  // Select field options
+  values?: string[];
+  // Date field options
+  includeTime?: boolean;
+  // File field options
+  maxSize?: number;
+  mimeTypes?: string[];
+  // Editor field options
+  richTextFormat?: string;
+  [key: string]: unknown;
+}
+
+interface Column {
+  key: string;
+  name: string;
+  type: string;
+  required: boolean;
+  system?: boolean;
+  options?: SchemaFieldOptions;
+  collectionId?: string; // For relation fields, the target collection ID
+}
+
+function getDisplayColumns(collection: CollectionModel | null): Column[] {
+  if (!collection) return [];
+
+  // Define system fields to always show
+  const systemFields: Column[] = [
+    { key: "id", name: "ID", type: "text", required: false, system: true },
+  ];
+
+  // Get schema fields from the collection
+  const schemaFields: Column[] =
+    collection.schema?.map(
+      (field: {
+        name: string;
+        type: string;
+        required: boolean;
+        options?: SchemaFieldOptions;
+      }) => {
+        // Extract relation collection ID from options for relation fields
+        let collectionId: string | undefined;
+        if (field.type === "relation" && field.options) {
+          collectionId = field.options.collectionId as string | undefined;
+        }
+
+        return {
+          key: field.name,
+          name: field.name,
+          type: field.type,
+          required: field.required,
+          system: false,
+          options: field.options || {},
+          collectionId,
+        };
+      },
+    ) || [];
+
+  return [...systemFields, ...schemaFields];
+}
+
+function formatCellValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+// Get row state color class
+function getRowStateColor(state: RowState, hasError?: boolean): string {
+  if (hasError) return "bg-red-50/80 hover:bg-red-100";
+  switch (state) {
+    case "new":
+      return "bg-green-50/60 hover:bg-green-100";
+    case "modified":
+      return "bg-amber-50/60 hover:bg-amber-100";
+    default:
+      return "bg-slate-50 hover:bg-slate-100";
+  }
+}
+
+// Get row state indicator
+function getRowStateIndicator(
+  state: RowState,
+  hasError?: boolean,
+): { color: string; label: string; bgClass: string } | null {
+  if (hasError)
+    return { color: "bg-red-500", label: "Error", bgClass: "bg-red-100" };
+  switch (state) {
+    case "new":
+      return { color: "bg-green-500", label: "New", bgClass: "bg-green-100" };
+    case "modified":
+      return {
+        color: "bg-amber-500",
+        label: "Modified",
+        bgClass: "bg-amber-100",
+      };
+    default:
+      return null;
+  }
+}
+
+// Check if value is valid JSON
+function isValidJSON(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  try {
+    JSON.parse(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Format JSON for display
+function formatJSON(value: string): string {
+  try {
+    const parsed = JSON.parse(value);
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return value;
+  }
+}
+
+// Check if content looks like markdown
+function isMarkdown(value: string): boolean {
+  return /^(#{1,6}\s|[*\-_]{2,}\s|`{3,}|>{1,2}\s|\[.+\]\(.+\)|!\[.+\]\(.+\)|\*\*.+\*\*|~~.+~~)/m.test(
+    value,
+  );
+}
+
+// Format date for input field
+function formatDateForInput(value: unknown, includeTime?: boolean): string {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    // Handle ISO date string
+    const date = new Date(value);
+    if (!isNaN(date.getTime())) {
+      const dateStr = date.toISOString().split("T")[0];
+      if (includeTime) {
+        const timeStr = date.toTimeString().slice(0, 5);
+        return `${dateStr}T${timeStr}`;
+      }
+      return dateStr;
+    }
+    return value;
+  }
+
+  return "";
+}
+
+// Parse date from input to PocketBase format
+function parseDateFromInput(
+  value: string,
+  includeTime?: boolean,
+): string | null {
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return null;
+
+  if (includeTime) {
+    // Return full datetime format
+    return date.toISOString().replace("T", " ").slice(0, 19);
+  }
+
+  // Return date only format (YYYY-MM-DD)
+  return value.split("T")[0];
+}
+
+export function RecordsTable() {
+  const {
+    selectedCollection,
+    trackedRecords,
+    isLoading,
+    error,
+    updateCell,
+    addNewRows,
+    discardChanges,
+    hasChanges,
+    isSaving,
+    saveResult,
+    saveAllChanges,
+    clearSaveResult,
+    client,
+  } = usePocketBase();
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [rowsToAdd, setRowsToAdd] = useState(1);
+
+  // State for relation field options
+  const [relationOptions, setRelationOptions] = useState<
+    Record<string, { id: string; [key: string]: unknown }[]>
+  >({});
+  const [isLoadingRelations, setIsLoadingRelations] = useState(false);
+
+  // State for preview mode and expanded cells
+  const [previewMode, setPreviewMode] = useState<Record<string, boolean>>({});
+  const [expandedCells, setExpandedCells] = useState<Record<string, boolean>>(
+    {},
+  );
