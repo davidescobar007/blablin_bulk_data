@@ -20,9 +20,7 @@ export function CellEditor({
   aiGenerating,
   client,
   isExpanded,
-  isPreview,
   onToggleExpand,
-  onTogglePreview,
   onCellFocus,
 }: CellEditorProps) {
   const getInitialValue = () => {
@@ -36,6 +34,36 @@ export function CellEditor({
   };
 
   const initialEditValue = useMemo(() => getInitialValue(), [value, column.type, column.key]);
+
+  // Helper function to get display text for a relation record
+  const getRelationDisplayText = (record: any): string => {
+    if (!record) return '';
+
+    // Use displayFields if provided
+    if (column.options?.displayFields && column.options.displayFields.length > 0) {
+      const displayParts = column.options.displayFields
+        .map((field: string) => {
+          const value = record[field];
+          return value !== undefined && value !== null ? String(value) : '';
+        })
+        .filter((part: string) => part !== '');
+
+      if (displayParts.length > 0) {
+        return displayParts.join(' - ');
+      }
+    }
+
+    // Fallback: try to find a common display field
+    const commonDisplayFields = ['name', 'title', 'label', 'subject', 'firstName', 'lastName'];
+    for (const field of commonDisplayFields) {
+      if (record[field] !== undefined && record[field] !== null) {
+        return String(record[field]);
+      }
+    }
+
+    // Last resort: return ID
+    return record.id || '';
+  };
 
   const [editValue, setEditValue] = useState<string>(initialEditValue);
   const [error] = useState<string | null>(null);
@@ -131,7 +159,7 @@ export function CellEditor({
     ) {
       onLoadRelationOptions(column.collectionId);
     }
-  }, [column.type, column.collectionId, onLoadRelationOptions]);
+  }, [column.type, column.collectionId]);
 
   const showAIButton =
     !column.system &&
@@ -162,6 +190,9 @@ export function CellEditor({
           }}
           className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           disabled={column.system}
+          autoComplete="off"
+          data-form-type="other"
+          aria-label={`Edit ${column.name} for record ${record.id}`}
         />
       );
     }
@@ -178,6 +209,9 @@ export function CellEditor({
           }}
           className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           disabled={column.system}
+          autoComplete="off"
+          data-form-type="other"
+          aria-label={`Edit ${column.name} for record ${record.id}`}
         />
       );
     }
@@ -197,6 +231,9 @@ export function CellEditor({
           }}
           className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
           disabled={column.system}
+          autoComplete="off"
+          data-form-type="other"
+          aria-label={`Edit ${column.name} for record ${record.id}`}
         />
       );
     }
@@ -215,6 +252,9 @@ export function CellEditor({
           }}
           className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           disabled={column.system}
+          autoComplete="off"
+          data-form-type="other"
+          aria-label={`Edit ${column.name} for record ${record.id}`}
         >
           <option value="">Select...</option>
           {column.options.values.map((opt: string) => (
@@ -240,11 +280,14 @@ export function CellEditor({
           }}
           className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           disabled={column.system}
+          autoComplete="off"
+          data-form-type="other"
+          aria-label={`Edit ${column.name} for record ${record.id}`}
         >
           <option value="">Select...</option>
           {options.map((opt: any) => (
             <option key={opt.id} value={opt.id}>
-              {opt.id}
+              {getRelationDisplayText(opt)}
             </option>
           ))}
         </select>
@@ -267,6 +310,9 @@ export function CellEditor({
           }}
           className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           disabled={column.system}
+          autoComplete="off"
+          data-form-type="other"
+          aria-label={`Edit ${column.name} for record ${record.id}`}
         />
       );
     }
@@ -316,7 +362,7 @@ export function CellEditor({
                 </button>
               )}
             </div>
-          ) : (
+           ) : (
             <input
               type="file"
               onChange={(e) => {
@@ -327,6 +373,9 @@ export function CellEditor({
               }}
               className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               disabled={column.system}
+              autoComplete="off"
+              data-form-type="other"
+              aria-label={`Edit ${column.name} for record ${record.id}`}
             />
           )}
           {displayUrl && (
@@ -360,6 +409,9 @@ export function CellEditor({
           className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
           rows={rows}
           disabled={column.system}
+          autoComplete="off"
+          data-form-type="other"
+          aria-label={`Edit ${column.name} for record ${record.id}`}
         />
       );
     }
@@ -375,6 +427,9 @@ export function CellEditor({
         }}
         className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         disabled={column.system}
+        autoComplete="off"
+        data-form-type="other"
+        aria-label={`Edit ${column.name} for record ${record.id}`}
       />
     );
   };
@@ -398,17 +453,6 @@ export function CellEditor({
               {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
           ) : null}
-          <button
-            onClick={onTogglePreview}
-            className={`ml-1 p-1 rounded transition-colors ${
-              isPreview
-                ? "bg-blue-50 text-blue-600"
-                : "hover:bg-slate-100 text-slate-600"
-            }`}
-            title={isPreview ? "Hide preview" : "Show preview"}
-          >
-            <Eye className="w-3 h-3" />
-          </button>
           {showAIButton && onGenerateAI && (
             <button
               onClick={(e) => {

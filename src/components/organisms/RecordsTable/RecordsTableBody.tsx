@@ -1,5 +1,7 @@
 import type { Column } from "../../../types/records.types";
 import { CellEditor } from "../../records-table/CellEditor";
+import { flexRender } from "@tanstack/react-table";
+import { getRowStateColor } from "../../records-table/utils";
 
 export interface TableBodyProps {
   table: any; // TanStack Table instance with complex types
@@ -12,9 +14,7 @@ export interface TableBodyProps {
   onGenerateAI: (recordId: string, columnName: string) => void;
   aiGenerating: Record<string, boolean>;
   expandedCells: Record<string, boolean>;
-  previewMode: Record<string, boolean>;
   setExpandedCells: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-  setPreviewMode: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
 }
 
 export function RecordsTableBody({
@@ -28,20 +28,23 @@ export function RecordsTableBody({
   onGenerateAI,
   aiGenerating,
   expandedCells,
-  previewMode,
   setExpandedCells,
-  setPreviewMode,
 }: TableBodyProps) {
   return (
     <tbody className="divide-y divide-slate-200">
       {table.getRowModel().rows.map((row: any) => (
         <tr
           key={row.id}
-          className="border border-slate-200 bg-slate-50 hover:bg-slate-100 border-l-4 border-slate-300"
+          className={`border border-slate-200 ${getRowStateColor(
+            row.original.state,
+            !!row.original.error,
+          )}`}
         >
           {row.getVisibleCells().map((cell: any) => {
             const cellClassName = cell.column.columnDef.meta?.cellClassName || "px-4 py-2";
+            const isSelectColumn = cell.column.id === "select";
             const displayColumn = displayColumns.find(col => col.key === cell.column.id);
+            const hasFieldChange = !isSelectColumn && displayColumn && row.original.changes?.[cell.column.id];
 
             return (
               <td
@@ -49,37 +52,39 @@ export function RecordsTableBody({
                 className={`${cellClassName} text-sm text-slate-700`}
                 style={{ width: cell.column.getSize() }}
               >
-                {displayColumn ? (
-                  <CellEditor
-                    record={row.original}
-                    column={displayColumn}
-                    value={row.original.data[displayColumn.key]}
-                    isExpanded={expandedCells[`${row.original.id}-${displayColumn.key}`]}
-                    isPreview={previewMode[`${row.original.id}-${displayColumn.key}`]}
-                    onToggleExpand={() => {
-                      const cellKey = `${row.original.id}-${displayColumn.key}`;
-                      setExpandedCells((prev: Record<string, boolean>) => ({
-                        ...prev,
-                        [cellKey]: !prev[cellKey],
-                      }));
-                    }}
-                    onTogglePreview={() => {
-                      const cellKey = `${row.original.id}-${displayColumn.key}`;
-                      setPreviewMode((prev: Record<string, boolean>) => ({
-                        ...prev,
-                        [cellKey]: !prev[cellKey],
-                      }));
-                    }}
-                    onUpdate={(newValue: unknown) => {
-                      updateCell(row.original.id, displayColumn.key, newValue);
-                    }}
-                    onCellFocus={onCellFocus}
-                    onLoadRelationOptions={loadRelationOptions}
-                    relationOptions={relationOptions}
-                    onGenerateAI={onGenerateAI}
-                    aiGenerating={aiGenerating}
-                    client={client}
-                  />
+                {isSelectColumn ? (
+                  flexRender(
+                    cell.column.columnDef.cell,
+                    cell.getContext(),
+                  )
+                ) : displayColumn ? (
+                  <div className="relative">
+                    {hasFieldChange && (
+                      <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                    )}
+                    <CellEditor
+                      record={row.original}
+                      column={displayColumn}
+                      value={row.original.data[displayColumn.key]}
+                      isExpanded={expandedCells[`${row.original.id}-${displayColumn.key}`]}
+                      onToggleExpand={() => {
+                        const cellKey = `${row.original.id}-${displayColumn.key}`;
+                        setExpandedCells((prev: Record<string, boolean>) => ({
+                          ...prev,
+                          [cellKey]: !prev[cellKey],
+                        }));
+                      }}
+                      onUpdate={(newValue: unknown) => {
+                        updateCell(row.original.id, displayColumn.key, newValue);
+                      }}
+                      onCellFocus={onCellFocus}
+                      onLoadRelationOptions={loadRelationOptions}
+                      relationOptions={relationOptions}
+                      onGenerateAI={onGenerateAI}
+                      aiGenerating={aiGenerating}
+                      client={client}
+                    />
+                  </div>
                 ) : (
                   <span className="text-slate-400">-</span>
                 )}

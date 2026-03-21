@@ -1,4 +1,4 @@
-import { Plus, Trash2, Save, Columns, Settings, Wand2 } from "lucide-react";
+import { Plus, Trash2, Save, Columns, Settings, Wand2, Filter } from "lucide-react";
 import { Button } from "../../atoms/Button";
 
 export interface TableActionsProps {
@@ -12,6 +12,9 @@ export interface TableActionsProps {
   onToggleColumnSelector: () => void;
   onShowAISettings: () => void;
   onShowAIBulkDialog: () => void;
+  onShowFilters?: () => void;
+  activeFilterCount?: number;
+  hasActiveFilters?: boolean;
 }
 
 export function RecordsTableActions({
@@ -25,6 +28,9 @@ export function RecordsTableActions({
   onToggleColumnSelector,
   onShowAISettings,
   onShowAIBulkDialog,
+  onShowFilters,
+  activeFilterCount = 0,
+  hasActiveFilters = false,
 }: TableActionsProps) {
   return (
     <div className="flex items-center justify-between">
@@ -52,6 +58,24 @@ export function RecordsTableActions({
         >
           Columns
         </Button>
+        {onShowFilters && (
+          <Button
+            onClick={onShowFilters}
+            variant="secondary"
+            icon={<Filter className="w-4 h-4" />}
+          >
+            Filters
+            {activeFilterCount > 0 && (
+              <span
+                className={`ml-1.5 min-w-[20px] h-5 flex items-center justify-center px-1.5 text-xs font-bold rounded-full ${
+                  hasActiveFilters ? "bg-blue-500" : "bg-slate-400"
+                }`}
+              >
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
+        )}
         <Button
           onClick={onShowAISettings}
           variant="primary"

@@ -42,14 +42,66 @@ export function formatCellValue(value: unknown): string {
   return String(value);
 }
 
+export function formatRelationValue(value: unknown, column: Column, relationOptions?: Record<string, { id: string; [key: string]: unknown }[]>): string {
+  if (value === null || value === undefined) return "";
+
+  // If value is already a string (just an ID), try to find the full record
+  if (typeof value === "string" && column.collectionId && relationOptions) {
+    const options = relationOptions[column.collectionId] || [];
+    const fullRecord = options.find(opt => opt.id === value);
+    if (fullRecord) {
+      return getRelationDisplayText(fullRecord, column);
+    }
+    return value;
+  }
+
+  // If value is an object (full relation record)
+  if (typeof value === "object" && value !== null && "id" in value) {
+    return getRelationDisplayText(value as any, column);
+  }
+
+  return String(value);
+}
+
+function getRelationDisplayText(record: any, column: Column): string {
+  if (!record) return '';
+
+  // Use displayFields if provided
+  if (column.options?.displayFields && column.options.displayFields.length > 0) {
+    const displayParts = column.options.displayFields
+      .map((field: string) => {
+        const value = record[field];
+        return value !== undefined && value !== null ? String(value) : '';
+      })
+      .filter((part: string) => part !== '');
+
+    if (displayParts.length > 0) {
+      return displayParts.join(' - ');
+    }
+  }
+
+  // Fallback: try to find a common display field
+  const commonDisplayFields = ['name', 'title', 'label', 'subject', 'firstName', 'lastName'];
+  for (const field of commonDisplayFields) {
+    if (record[field] !== undefined && record[field] !== null) {
+      return String(record[field]);
+    }
+  }
+
+  // Last resort: return ID
+  return record.id || '';
+}
+
 export function getRowStateColor(state: string, hasError?: boolean): string {
-  if (hasError)
+  if (hasError || state === "error")
     return "bg-red-50 hover:bg-red-100 border-l-4 border-red-400";
   switch (state) {
     case "new":
       return "bg-green-50 hover:bg-green-100 border-l-4 border-green-400";
     case "modified":
       return "bg-amber-50 hover:bg-amber-100 border-l-4 border-amber-400";
+    case "saved":
+      return "bg-blue-50 hover:bg-blue-100 border-l-4 border-blue-400";
     default:
       return "bg-slate-50 hover:bg-slate-100 border-l-4 border-slate-300";
   }

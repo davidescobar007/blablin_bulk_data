@@ -61,7 +61,7 @@ export interface AICollectionConfig {
 }
 
 // Row state types
-export type RowState = "original" | "modified" | "new";
+export type RowState = "original" | "modified" | "new" | "saved" | "error";
 
 // Interface for row-level errors
 export interface RowError {
@@ -674,6 +674,19 @@ export function PocketBaseProvider({ children }: { children: ReactNode }) {
           .create(hasFiles && formData ? formData : data);
         console.log(`[PocketBase] Record created successfully:`, result.id);
         successCount++;
+
+        setTrackedRecords((prev) =>
+          prev.map((record) => {
+            if (record.id === newRows[i]?.id) {
+              return {
+                ...record,
+                state: "saved" as RowState,
+                changes: {},
+              };
+            }
+            return record;
+          })
+        );
       } catch (err) {
         console.error(`[PocketBase] Failed to create record ${i + 1}:`, err);
         failedCount++;
@@ -687,6 +700,7 @@ export function PocketBaseProvider({ children }: { children: ReactNode }) {
                     err instanceof Error
                       ? err.message
                       : "Failed to create record",
+                  state: "error" as RowState,
                 };
               }
               return record;
@@ -710,6 +724,19 @@ export function PocketBaseProvider({ children }: { children: ReactNode }) {
           .update(id, hasFiles && formData ? formData : data);
         console.log(`[PocketBase] Record updated successfully:`, result.id);
         successCount++;
+
+        setTrackedRecords((prev) =>
+          prev.map((record) => {
+            if (record.id === id) {
+              return {
+                ...record,
+                state: "saved" as RowState,
+                changes: {},
+              };
+            }
+            return record;
+          })
+        );
       } catch (err) {
         console.error(`[PocketBase] Failed to update record ${i + 1}:`, err);
         failedCount++;
@@ -722,6 +749,7 @@ export function PocketBaseProvider({ children }: { children: ReactNode }) {
                   err instanceof Error
                     ? err.message
                     : "Failed to update record",
+                state: "error" as RowState,
               };
             }
             return record;

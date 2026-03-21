@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useReactTable, getCoreRowModel, type ColumnDef } from "@tanstack/react-table";
 import { Loader2, AlertCircle, Table, Wand2 } from "lucide-react";
 import { usePocketBase } from "../../../context/usePocketBase";
@@ -12,13 +12,16 @@ import { AISettingsDialog } from "../../AISettingsDialog";
 import { AIColumnConfigDialog } from "../../organisms/AIColumnConfig";
 import { AddRecordsDialog } from "../../records-table/AddRecordsDialog";
 import { AIBulkDialog } from "../../records-table/AIBulkDialog";
-import { ColumnSelector } from "../../records-table/ColumnSelector";
+import { ColumnDrawer } from "../../records-table/ColumnDrawer";
 import { PreviewPanel } from "../../records-table/PreviewPanel";
 import { useTableSelection } from "../../records-table/hooks/useTableSelection";
 import { useColumnVisibility } from "../../records-table/hooks/useColumnVisibility";
 import { useAIGeneration } from "../../records-table/hooks/useAIGeneration";
+import { useTableFilters } from "../../records-table/hooks/useTableFilters";
 import { getDisplayColumns } from "../../../utils/formatters";
 import { flexRender } from "@tanstack/react-table";
+import { FilterDrawer } from "../../records-table/FilterDrawer";
+import { generateAIContent, generateAIImage } from "../../../context/useAI";
 
 export function RecordsTable() {
   const {
@@ -37,14 +40,15 @@ export function RecordsTable() {
     client,
     getAIConfig,
     setAIConfig,
+    aiApiKey,
   } = usePocketBase();
 
   const [relationOptions, setRelationOptions] = useState<
     Record<string, { id: string; [key: string]: unknown }[]>
   >({});
-  const [isLoadingRelations, setIsLoadingRelations] = useState(false);
   const [expandedCells, setExpandedCells] = useState<Record<string, boolean>>({});
-  const [previewMode, setPreviewMode] = useState<Record<string, boolean>>({});
+  // Track loading collections using a ref for immediate atomic access
+  const loadingCollectionsRef = useRef<Set<string>>(new Set());
   const [selectedCell, setSelectedCell] = useState<{
     recordId: string;
     field: string;
@@ -56,11 +60,6 @@ export function RecordsTable() {
   const [showAIColumnConfig, setShowAIColumnConfig] = useState(false);
   const [configuringColumn, setConfiguringColumn] = useState<string | null>(null);
   const [aiConfig, setAiConfig] = useState<AIColumnConfig | null>(null);
-
-  const { selectedRows, handleSelectAll, handleRowSelect } = useTableSelection(
-    trackedRecords,
-    selectedCollection,
-  );
 
   const {
     visibleColumnKeys,
@@ -80,13 +79,39 @@ export function RecordsTable() {
     handleGenerateAI,
   } = useAIGeneration(trackedRecords, selectedCollection, updateCell);
 
-  const loadRelationOptions = useCallback(async (collectionId: string) => {
-    if (relationOptions[collectionId] || isLoadingRelations) return;
+  const {
+    filters,
+    filteredRecords,
+    setGlobalSearch,
+    setColumnFilter,
+    clearAllFilters,
+    hasActiveFilters,
+    activeFilterCount,
+    setShowFilterDrawer,
+  } = useTableFilters({ records: trackedRecords, columns: displayColumns });
 
-    setIsLoadingRelations(true);
+  const { selectedRows, handleSelectAll, handleRowSelect } = useTableSelection(
+    filteredRecords,
+    selectedCollection,
+  );
+
+  const loadRelationOptions = useCallback(async (collectionId: string) => {
+    if (relationOptions[collectionId]) return;
+
+    // Check ref atomically - if already loading, return immediately
+    if (loadingCollectionsRef.current.has(collectionId)) {
+      console.log(`[loadRelationOptions] Collection ${collectionId} already loading, skipping`);
+      return;
+    }
+
+    // Add to ref atomically
+    loadingCollectionsRef.current.add(collectionId);
+
     try {
       if (!client) return;
+      console.log(`[loadRelationOptions] Loading options for collection: ${collectionId}`);
       const records = await client.collection(collectionId).getFullList();
+      console.log(`[loadRelationOptions] Successfully loaded ${records.length} options for ${collectionId}`);
       setRelationOptions((prev) => ({
         ...prev,
         [collectionId]: records,
@@ -94,9 +119,9 @@ export function RecordsTable() {
     } catch (err) {
       console.error("Failed to load relation options:", err);
     } finally {
-      setIsLoadingRelations(false);
+      loadingCollectionsRef.current.delete(collectionId);
     }
-  }, [relationOptions, isLoadingRelations, client]);
+  }, [relationOptions, client]);
 
   const columnDefinitions = useMemo<ColumnDef<TrackedRecord>[]>(
     () => [
@@ -109,7 +134,7 @@ export function RecordsTable() {
         header: () => {
           const allSelected =
             selectedRows.length > 0 &&
-            selectedRows.length === trackedRecords.length;
+            selectedRows.length === filteredRecords.length;
           return (
             <div className="flex items-center justify-center w-full h-full">
               <input
@@ -117,6 +142,9 @@ export function RecordsTable() {
                 checked={allSelected}
                 onChange={handleSelectAll}
                 className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-3 h-3 flex-shrink-0"
+                autoComplete="off"
+                data-form-type="other"
+                aria-label="Select all rows"
               />
             </div>
           );
@@ -130,6 +158,9 @@ export function RecordsTable() {
                 checked={isChecked}
                 onChange={(e) => handleRowSelect(row.original.id, e.target.checked)}
                 className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-3 h-3 flex-shrink-0"
+                autoComplete="off"
+                data-form-type="other"
+                aria-label={`Select row ${row.original.id}`}
               />
             </div>
           );
@@ -154,7 +185,7 @@ export function RecordsTable() {
   );
 
   const table = useReactTable({
-    data: trackedRecords,
+    data: filteredRecords,
     columns: columnDefinitions,
     getCoreRowModel: getCoreRowModel(),
     enableColumnResizing: true,
@@ -173,7 +204,6 @@ export function RecordsTable() {
   const handleDiscardChanges = useCallback(() => {
     discardChanges();
     setExpandedCells({});
-    setPreviewMode({});
   }, [discardChanges]);
 
   const handleCellFocus = useCallback((recordId: string, field: string, value: unknown, column: Column) => {
@@ -189,19 +219,120 @@ export function RecordsTable() {
     }
   }, [saveResult, clearSaveResult]);
 
-  const handleBulkGenerateAI = useCallback(async (columnName?: string) => {
-    if (!selectedCollection) return;
+  const handleShowAIBulkDialog = useCallback(() => {
+    if (selectedRows.length === 0) return;
+    setShowAIBulkDialog(true);
+  }, [selectedRows]);
 
-    const config = getAIConfig(selectedCollection.name, columnName || "");
-    if (!config) return;
+  const handleBulkGenerateAI = useCallback(async (columnNames?: string[]) => {
+    if (!columnNames || columnNames.length === 0) {
+      if (selectedRows.length === 0) return;
+      setShowAIBulkDialog(true);
+      return;
+    }
+
+    if (!selectedCollection || !aiApiKey) return;
+
+    const configs = columnNames.map((colName) => ({
+      name: colName,
+      config: getAIConfig(selectedCollection.name, colName),
+    })).filter((c) => c.config);
+
+    if (configs.length === 0) return;
 
     const selectedRecords = trackedRecords.filter((r) =>
       selectedRows.includes(r.id)
     );
     if (selectedRecords.length === 0) return;
 
-    setShowAIBulkDialog(true);
-  }, [trackedRecords, selectedRows, selectedCollection, setShowAIBulkDialog, getAIConfig]);
+    setShowAIBulkDialog(false);
+
+    for (const { name: columnName, config } of configs) {
+      for (const record of selectedRecords) {
+        let prompt = config.defaultPrompt;
+        let variableColumns = config.defaultVariableColumns;
+
+        if (config.conditionalRules && config.conditionalRules.length > 0) {
+          for (const rule of config.conditionalRules) {
+            const fieldValue = record.data[rule.column];
+            let matches = false;
+
+            switch (rule.operator) {
+              case "eq":
+                matches = fieldValue === rule.value;
+                break;
+              case "neq":
+                matches = fieldValue !== rule.value;
+                break;
+              case "gt":
+                matches = typeof fieldValue === "number" &&
+                         typeof rule.value === "number" &&
+                         fieldValue > rule.value;
+                break;
+              case "gte":
+                matches = typeof fieldValue === "number" &&
+                         typeof rule.value === "number" &&
+                         fieldValue >= rule.value;
+                break;
+              case "lt":
+                matches = typeof fieldValue === "number" &&
+                         typeof rule.value === "number" &&
+                         fieldValue < rule.value;
+                break;
+              case "lte":
+                matches = typeof fieldValue === "number" &&
+                         typeof rule.value === "number" &&
+                         fieldValue <= rule.value;
+                break;
+              case "contains":
+                matches = typeof fieldValue === "string" &&
+                         typeof rule.value === "string" &&
+                         fieldValue.includes(rule.value);
+                break;
+              case "not_contains":
+                matches = typeof fieldValue === "string" &&
+                         typeof rule.value === "string" &&
+                         !fieldValue.includes(rule.value);
+                break;
+            }
+
+            if (matches) {
+              prompt = rule.prompt;
+              variableColumns = rule.variableColumns;
+              break;
+            }
+          }
+        }
+
+        if (!prompt) continue;
+
+        try {
+          if (config.generateImage) {
+            const file = await generateAIImage(
+              aiApiKey,
+              prompt,
+              variableColumns,
+              record.data,
+              config.model || "gemini-3.1-flash-image-preview",
+            );
+            updateCell(record.id, columnName, file);
+          } else {
+            const content = await generateAIContent(
+              aiApiKey,
+              prompt,
+              variableColumns,
+              record.data,
+              config.formatInstructions,
+              config.model || "gemini-2.5-flash",
+            );
+            updateCell(record.id, columnName, content);
+          }
+        } catch (error) {
+          console.error(`AI generation failed for record ${record.id}, column ${columnName}:`, error);
+        }
+      }
+    }
+  }, [aiApiKey, selectedCollection, getAIConfig, trackedRecords, selectedRows, setShowAIBulkDialog, updateCell]);
 
   const handleShowAIColumnConfig = useCallback((columnName: string) => {
     if (selectedCollection) {
@@ -263,7 +394,10 @@ export function RecordsTable() {
         onSaveChanges={handleSaveChanges}
         onToggleColumnSelector={() => setShowColumnSelector(!showColumnSelector)}
         onShowAISettings={() => setShowAISettings(true)}
-        onShowAIBulkDialog={handleBulkGenerateAI}
+        onShowAIBulkDialog={handleShowAIBulkDialog}
+        onShowFilters={() => setShowFilterDrawer(true)}
+        activeFilterCount={activeFilterCount}
+        hasActiveFilters={hasActiveFilters}
       />
 
       {saveResult && (
@@ -278,17 +412,6 @@ export function RecordsTable() {
 
       <div className="flex gap-4">
         <div className="flex-1 border border-slate-200 rounded-lg overflow-hidden relative">
-          {showColumnSelector && (
-            <div className="absolute top-0 left-0 z-10">
-              <ColumnSelector
-                visibleColumnKeys={visibleColumnKeys}
-                allColumns={allColumns}
-                toggleColumnVisibility={toggleColumnVisibility}
-                selectAllColumns={selectAllColumns}
-                clearAllColumns={clearAllColumns}
-              />
-            </div>
-          )}
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <thead className="bg-slate-50 border-b border-slate-200">
@@ -365,9 +488,7 @@ export function RecordsTable() {
                 onGenerateAI={handleGenerateAI}
                 aiGenerating={aiGenerating}
                 expandedCells={expandedCells}
-                previewMode={previewMode}
                 setExpandedCells={setExpandedCells}
-                setPreviewMode={setPreviewMode}
               />
             </table>
           </div>
@@ -407,8 +528,28 @@ export function RecordsTable() {
         onClose={() => setShowAIBulkDialog(false)}
         selectedRowsCount={selectedRows.length}
         displayColumns={displayColumns}
-        bulkGeneratingColumn={null}
         onGenerate={handleBulkGenerateAI}
+      />
+
+      <ColumnDrawer
+        isOpen={showColumnSelector}
+        onClose={() => setShowColumnSelector(false)}
+        visibleColumnKeys={visibleColumnKeys}
+        allColumns={allColumns}
+        toggleColumnVisibility={toggleColumnVisibility}
+        selectAllColumns={selectAllColumns}
+        clearAllColumns={clearAllColumns}
+      />
+
+      <FilterDrawer
+        isOpen={filters.showFilterDrawer}
+        onClose={() => setShowFilterDrawer(false)}
+        filters={filters}
+        onGlobalSearchChange={setGlobalSearch}
+        onColumnFilterChange={setColumnFilter}
+        onClearAll={clearAllFilters}
+        displayColumns={displayColumns}
+        relationOptions={relationOptions}
       />
     </div>
   );

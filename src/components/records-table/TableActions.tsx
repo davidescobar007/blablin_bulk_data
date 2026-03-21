@@ -1,4 +1,4 @@
-import { Plus, Trash2, Save, Loader2, Columns, Settings, Wand2 } from "lucide-react";
+import { Plus, Trash2, Save, Loader2, Columns, Settings, Wand2, Filter } from "lucide-react";
 
 interface TableActionsProps {
   hasChanges: boolean;
@@ -11,6 +11,38 @@ interface TableActionsProps {
   onDiscardChanges: () => void;
   onSaveChanges: () => void;
   onShowAIBulkDialog: () => void;
+  onShowFilters?: () => void;
+  activeFilterCount?: number;
+  hasActiveFilters?: boolean;
+}
+
+// Inline FilterButton component to avoid import issues
+interface FilterButtonProps {
+  onClick: () => void;
+  activeFilterCount: number;
+  hasActiveFilters: boolean;
+}
+
+function InlineFilterButton({ onClick, activeFilterCount, hasActiveFilters }: FilterButtonProps) {
+  console.log('[InlineFilterButton] Rendered:', { onClick, activeFilterCount, hasActiveFilters });
+  return (
+    <button
+      onClick={onClick}
+      className="relative inline-flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+    >
+      <Filter className="w-4 h-4" />
+      Filters
+      {activeFilterCount > 0 && (
+        <span
+          className={`absolute -top-2 -right-2 min-w-[20px] h-5 flex items-center justify-center px-1.5 text-xs font-bold rounded-full ${
+            hasActiveFilters ? "bg-blue-500" : "bg-slate-400"
+          }`}
+        >
+          {activeFilterCount}
+        </span>
+      )}
+    </button>
+  );
 }
 
 export function TableActions({
@@ -24,7 +56,11 @@ export function TableActions({
   onDiscardChanges,
   onSaveChanges,
   onShowAIBulkDialog,
+  onShowFilters,
+  activeFilterCount = 0,
+  hasActiveFilters = false,
 }: TableActionsProps) {
+  console.log('[TableActions] Rendered');
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
@@ -53,6 +89,13 @@ export function TableActions({
             Columns
           </button>
         </div>
+        {onShowFilters && (
+          <InlineFilterButton
+            onClick={onShowFilters}
+            activeFilterCount={activeFilterCount}
+            hasActiveFilters={hasActiveFilters}
+          />
+        )}
         <button
           onClick={() => setShowAISettings(true)}
           className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
