@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Loader2, Wand2, FileText, X, Eye, ChevronUp, ChevronDown } from "lucide-react";
+import { Loader2, Wand2, FileText, X, Eye, ChevronUp, ChevronDown, EyeOff } from "lucide-react";
 import { usePocketBase } from "../../context/usePocketBase";
 import { ImagePreviewModal } from "../atoms/Modal";
 import type { CellEditorProps } from "./types";
@@ -20,7 +20,9 @@ export function CellEditor({
   aiGenerating,
   client,
   isExpanded,
+  isPreview,
   onToggleExpand,
+  onTogglePreview,
   onCellFocus,
 }: CellEditorProps) {
   const getInitialValue = () => {
@@ -453,6 +455,17 @@ export function CellEditor({
               {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
           ) : null}
+          <button
+            onClick={onTogglePreview}
+            className={`ml-1 p-1 rounded transition-colors ${
+              isPreview
+                ? "bg-blue-50 text-blue-600"
+                : "hover:bg-slate-100 text-slate-600"
+            }`}
+            title={isPreview ? "Hide preview" : "Show preview"}
+          >
+            {isPreview ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+          </button>
           {showAIButton && onGenerateAI && (
             <button
               onClick={(e) => {

@@ -34,7 +34,6 @@ export function RecordsTable() {
     saveResult,
     saveAllChanges,
     clearSaveResult,
-    getAIConfig,
     client,
   } = usePocketBase();
 
@@ -95,20 +94,18 @@ export function RecordsTable() {
   console.log('[RecordsTable] Filter props:', { hasActiveFilters, activeFilterCount, displayColumnsLength: displayColumns.length });
 
   const handleBulkGenerateAI = useCallback(
-    async (columnName: string) => {
+    async (columnNames?: string[]) => {
       if (!selectedCollection) return;
-
-      const config = getAIConfig(selectedCollection.name, columnName);
-      if (!config) return;
-
-      const selectedRecords = trackedRecords.filter((r) =>
-        selectedRows.includes(r.id)
-      );
-      if (selectedRecords.length === 0) return;
-
-      setShowAIBulkDialog(true);
+      if (!columnNames || columnNames.length === 0) {
+        const selectedRecords = trackedRecords.filter((r) =>
+          selectedRows.includes(r.id)
+        );
+        if (selectedRecords.length === 0) return;
+        setShowAIBulkDialog(true);
+        return;
+      }
     },
-    [trackedRecords, selectedRows, selectedCollection, setShowAIBulkDialog, getAIConfig],
+    [trackedRecords, selectedRows, selectedCollection, setShowAIBulkDialog],
   );
 
   const loadRelationOptions = useCallback(async (collectionId: string) => {
@@ -204,10 +201,17 @@ export function RecordsTable() {
               column={col}
               value={value}
               isExpanded={isExpanded}
+              isPreview={previewMode[cellKey]}
               onToggleExpand={() => {
                 setExpandedCells((prev) => ({
                   ...prev,
                   [cellKey]: !isExpanded,
+                }));
+              }}
+              onTogglePreview={() => {
+                setPreviewMode((prev) => ({
+                  ...prev,
+                  [cellKey]: !prev[cellKey],
                 }));
               }}
               onUpdate={(newValue) => {

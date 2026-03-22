@@ -1,6 +1,6 @@
 import type { CollectionModel } from "pocketbase";
 
-export type AIOperator = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'not_contains';
+export type AIOperator = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'not_contains' | 'startsWith';
 
 export interface AIConditionRule {
   id: string;
@@ -35,7 +35,7 @@ export interface AICollectionConfig {
   [columnName: string]: AIColumnConfig;
 }
 
-export type RowState = "original" | "modified" | "new";
+export type RowState = "original" | "modified" | "new" | "saved" | "error";
 
 export interface TrackedRecord {
   id: string;

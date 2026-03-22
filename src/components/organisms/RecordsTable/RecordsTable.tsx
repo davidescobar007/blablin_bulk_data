@@ -47,6 +47,7 @@ export function RecordsTable() {
     Record<string, { id: string; [key: string]: unknown }[]>
   >({});
   const [expandedCells, setExpandedCells] = useState<Record<string, boolean>>({});
+  const [previewMode, setPreviewMode] = useState<Record<string, boolean>>({});
   // Track loading collections using a ref for immediate atomic access
   const loadingCollectionsRef = useRef<Set<string>>(new Set());
   const [selectedCell, setSelectedCell] = useState<{
@@ -247,8 +248,11 @@ export function RecordsTable() {
 
     setShowAIBulkDialog(false);
 
-    for (const { name: columnName, config } of configs) {
+    for (const { name: columnName, config: columnConfig } of configs) {
+      if (!columnConfig) continue;
+      
       for (const record of selectedRecords) {
+        const config = columnConfig;
         let prompt = config.defaultPrompt;
         let variableColumns = config.defaultVariableColumns;
 
@@ -289,17 +293,16 @@ export function RecordsTable() {
                          typeof rule.value === "string" &&
                          fieldValue.includes(rule.value);
                 break;
-              case "not_contains":
+              case "startsWith":
                 matches = typeof fieldValue === "string" &&
                          typeof rule.value === "string" &&
-                         !fieldValue.includes(rule.value);
+                         fieldValue.startsWith(rule.value);
                 break;
             }
 
-            if (matches) {
+            if (matches && rule.prompt) {
               prompt = rule.prompt;
-              variableColumns = rule.variableColumns;
-              break;
+              variableColumns = rule.variableColumns || variableColumns;
             }
           }
         }
@@ -489,6 +492,8 @@ export function RecordsTable() {
                 aiGenerating={aiGenerating}
                 expandedCells={expandedCells}
                 setExpandedCells={setExpandedCells}
+                previewMode={previewMode}
+                setPreviewMode={setPreviewMode}
               />
             </table>
           </div>

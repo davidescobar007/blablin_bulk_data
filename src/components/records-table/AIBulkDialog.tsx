@@ -8,6 +8,7 @@ interface AIBulkDialogProps {
   onClose: () => void;
   selectedRowsCount: number;
   displayColumns: Column[];
+  bulkGeneratingColumn?: string | null;
   onGenerate: (columnNames: string[]) => void;
 }
 

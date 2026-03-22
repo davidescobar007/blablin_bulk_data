@@ -260,7 +260,6 @@ export function AIColumnConfigDialog({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={!defaultPrompt.trim() && conditionalRules.length === 0}
             variant="primary"
           >
             Save Configuration
